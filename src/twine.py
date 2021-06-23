@@ -28,7 +28,6 @@ class Twine:
         else:
             raise ValueError(f"The given key: {key} is not valid")
 
-    @property
     def key_size(self):
         return len(str(self.key).encode("utf-8"))
 
