@@ -99,6 +99,11 @@ con = {
     0x23: 0x24,
 }
 
+key_space = [
+    string.ascii_lowercase,
+    string.ascii_uppercase,
+    string.digits
+]
 
 def _S(i):
     return sbox[i]
@@ -241,7 +246,7 @@ def _key_schedule_128(key):
     return RK_32
 
 
-def _encrypt(vector, P, RK):
+def _encrypt(P, RK):
     RK_32, X_16, C = dict(RK), ddict(lambda: ddict(int)), 0x0
     
     for i in range(16):
@@ -273,94 +278,50 @@ def _decrypt(C, RK):
         P = _append_4_bits(P, X_16[1][i])
     return P
 
-import random
-import string
-import binascii
-from math import ceil
 
+def __generate_key(key_size):
+    space = "".join(key_space)
+    if key_size == 0x50:
+        return "".join(random.choice(space) for i in range(0x0A))
+    elif key_size == 0x80:
+        return "".join(random.choice(space) for i in range(0x10))
 
-class Twine:
-    key_space = [
-        string.ascii_lowercase,
-        string.ascii_uppercase,
-        string.digits,
-    ]
+def __generate_RK(key, key_size):
+    if key_size == 0x50:
+        return _key_schedule_80(int(key.encode("utf-8").hex(), 16))
+    else:
+        return _key_schedule_128(int(key.encode("utf-8").hex(), 16))
 
-    def __init__(self, key=None, key_size=0x50, vector=None):
-        if type(key_size) == str:
-            key_size = int(key_size, 0)
-        if key_size not in [0x50, 0x80]:
-            raise ValueError(
-                f"the given key bit length of: {key_size} is not supported\nSupported only 80 or 128 bit"
-            )
-
-        if not key:
-            key = self.__generate_key(key_size)
-
-        if self.__is_key_valid(key):
-            self.key = key
+def __iterblocks(blocks):
+    for i in range(ceil(len(blocks) / 16)):
+        if i * 16 + 16 > len(blocks):
+            yield blocks[i * 16 : len(blocks)]
         else:
-            raise ValueError(f"The given key: {key} is not valid")
-        self.vector = self.__generateVector()
+            yield blocks[i * 16 : i * 16 + 16]
 
-    def key_size(self):
-        return len(str(self.key).encode("utf-8"))
+def encrypt(key, plaintext):
+    _c = ""
+    plaintext = plaintext.encode("utf-8").hex()
+    RK = __generate_RK(key, 0x80)
+    for block in __iterblocks(plaintext):
+        cblock = hex(_encrypt(int(block, 16), RK))[2:]
+        _c += cblock
+    return _c
 
-    def __is_key_valid(self, key):
-        kl = len(str(key).encode("utf-8"))
-        if kl != 0x0A and kl != 0x10:
-            return False
-        return True
+def decrypt(key, ciphertext):
+    _t = ""
+    RK = __generate_RK(key, 0x80)
+    for block in __iterblocks(ciphertext):
+        tblock = binascii.unhexlify(hex(_decrypt(int(block, 16), RK))[2:]).decode("utf-8")
+        _t += tblock
+    return _t
 
-    def __generate_key(self, key_size):
-        space = "".join(self.key_space)
-        if key_size == 0x50:
-            return "".join(random.choice(space) for i in range(0x0A))
-        elif key_size == 0x80:
-            return "".join(random.choice(space) for i in range(0x10))
-
-    def __generate_RK(self):
-        if self.key_size == 0x50:
-            return _key_schedule_80(int(self.key.encode("utf-8").hex(), 16))
-        else:
-            return _key_schedule_128(int(self.key.encode("utf-8").hex(), 16))
-
-    def __generateVector(self):
-        vector = "".join(self.key_space)
-        return "".join(random.choice(vector) for i in range(0x08))
-
-    def __iterblocks(self, blocks):
-        for i in range(ceil(len(blocks) / 16)):
-            if i * 16 + 16 > len(blocks):
-                yield blocks[i * 16 : len(blocks)]
-            else:
-                yield blocks[i * 16 : i * 16 + 16]
-
-    def encrypt(self, plaintext):
-        _c = ""
-        plaintext = plaintext.encode("utf-8").hex()
-        RK = self.__generate_RK()
-        vector = self.vector
-        for block in self.__iterblocks(plaintext):
-            cblock = hex(_encrypt(vector, int(block, 16), RK))[2:]
-            _c += cblock
-        return _c
-
-    def decrypt(self, ciphertext):
-        _t = ""
-        RK = self.__generate_RK()
-        for block in self.__iterblocks(ciphertext):
-            tblock = binascii.unhexlify(hex(_decrypt(int(block, 16), RK))[2:]).decode(
-                "utf-8"
-            )
-            _t += tblock
-        return _t
-
-twine = Twine(key_size=128)
-tmp = input("Write string: ")
-print(tmp)
-print(f'Encryption Key: "{twine.key}"', flush=True)
-enc = twine.encrypt(tmp)
-print(enc)
-print(f'Decryption Key: "{twine.key}"', flush=True)
-print(twine.decrypt(enc))
+a = 0x80
+key = __generate_key(a)
+print(key)
+plaintext = input("Write string: ")
+print(plaintext)
+ciphertext = encrypt(key, plaintext)
+print(ciphertext)
+plaintext = decrypt(key, ciphertext)
+print(plaintext)
